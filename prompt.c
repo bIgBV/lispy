@@ -9,10 +9,16 @@
 
 /* Fake readline function */
 char* readline(char* prompt){
+
+  /* gets a prompt and prints it out waiting for input */
   fputs(prompt, stdout);
   fgets(buffer, 2048, stdin);
+
+  /* Copy the input into a buffer called cpy and add \0 (Null terminator) to the end of the string */
   char* cpy = malloc(strlen(buffer)+1);
   cpy[strlen(cpy)-1] = '\0';
+
+
   return cpy;
 }
 
@@ -47,7 +53,6 @@ int main(int arc, char** argv){
 
     /* Free retrieved input */
     free(input);
-
 
   }
 
