@@ -1,5 +1,6 @@
 #include <stdio.h>
 #include <stdlib.h>
+#include <math.h>
 #include "mpc.h"
 
 /* If we are compiling on Windows, compile these functions */
@@ -44,6 +45,10 @@ long eval_op(long x, char* op, long y)
     return x * y;
   if(strcmp(op, "/") == 0)
     return x / y;
+  if(strcmp(op, "%") == 0)
+    return x % y;
+  if(strcmp(op, "^") == 0)
+    return pow(x, y);
   return 0;  
 }
 
@@ -83,7 +88,42 @@ long eval(mpc_ast_t* t)
   return x;
 }
 
+/* This is a function which returns the number of children a tree has */
+int number_of_children(mpc_ast_t* t)
+{
+  if(t->children_num == 0)
+    return 1;
+  if(t->children_num == 1)
+  {
+    int total = 1;
+    for(int i = 0; i< t->children_num; i++)
+    {
+      total = total + number_of_children(t->children[i]);
+    }
+    return total;
+  }
+}
 
+/* This is a function to count the number of branches of a tree */
+int number_of_branches(mpc_ast_t* t)
+{
+  // This the base case for our recursion. It checks if the fist has number,
+  // if it does then it means that there are no more branches.
+  if(strstr(t->tag, "number"))
+    return 1;
+
+  // Initializing the accumulators and the loop variables
+  int total = 1;
+  int i = 3;
+
+  // Checking if the tag contains expression
+  while(strstr(t->children[i]->tag, "expression"))
+  {
+    total  = total + number_of_branches(t->children[i]);
+    i ++;
+  }
+  return total;
+}
 
 /*Declare a static buffer for user input of maximun size 2048*/
 
@@ -102,7 +142,7 @@ int main(int arc, char** argv)
   mpca_lang(MPCA_LANG_DEFAULT,
       "									\
       	number		: /-?[0-9]+/	;				\
-	operator	: '+' | '-' | '*' | '/'	;			\
+	operator	: '+' | '-' | '*' | '/'	| '%' | '^';		\
 	expression	: <number> | '(' <operator> <expression>+ ')' ;	\
 	lispy		: /^/ <operator> <expression>+ /$/ ;		\      
       ",
@@ -127,10 +167,17 @@ int main(int arc, char** argv)
 
     if(mpc_parse("<stdin>", input, Lispy, &r))
     {
-      // On succes print the AST
-
+      //On succes print the AST
       long result = eval(r.output);
+      int total = number_of_children(r.output);
+      int branches = number_of_branches(r.output);
+
+
       printf("%li\n", result);
+      printf("This tree has %d children\n", total);
+      printf("This tree has %d branches\n", branches);
+
+      mpc_ast_print(r.output);
       mpc_ast_delete(r.output);
     }
     else
