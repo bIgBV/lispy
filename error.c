@@ -35,12 +35,15 @@ char* readline(char* prompt)
 #endif
 
 /* Create an Enumeration o  possible error types */
+// In the entire program lval is shrot for lisp value
 enum {  LERR_DIV_ZERO, LERR_BAD_OP, LERR_BAD_NUM };
 
 /* Create an Enumeration of possible lval types */
 enum { LVAL_NUM, LVAL_ERR  };
 
 /* Creating a new lval struct */
+// This makes a new datatype for our program to use.
+// To access this datatype we use the keyword lval
 typedef struct 
 {
   int type;
@@ -49,6 +52,9 @@ typedef struct
 } lval;
 
 /* Create a new number type lval */
+// This is a Function which returns our custom type lval.
+// This function creates a number type, which is set by 
+// the v.type which in turn uses the lval type enum.
 lval lval_num(long x) 
 {
   lval v;
@@ -58,6 +64,9 @@ lval lval_num(long x)
 }
 
 /* Create a new error type lval */
+// This is similar to the above function only this is used 
+// to create an error type lval by using the appropriate 
+// enum value.
 lval lval_err(int x)
 {
   lval v;
@@ -67,6 +76,7 @@ lval lval_err(int x)
 }
 
 /* Function to print lval */
+// This is because we have two types of possible lval types.
 void lval_print(lval v)
 {
   switch(v.type)
@@ -77,7 +87,8 @@ void lval_print(lval v)
       break;
 
     // In the case of an error, check what error it is and print the
-    // corresponding error message
+    // corresponding error message. This basically is defining the different
+    // values of the error enum.
     case LVAL_ERR:
       if(v.err == LERR_DIV_ZERO)
 	printf("Error: division by zero");
@@ -101,6 +112,8 @@ void lval_println(lval v)
  */
 lval eval_op(lval x, char* op, lval y)
 {
+  // This is similar to the previous version, only difference being that 
+  // we are checking whether lval is of the type error.
   // If either of the values is an error, return It
   if(x.type == LVAL_ERR)
     return x;
@@ -126,6 +139,13 @@ lval eval_op(lval x, char* op, lval y)
  * string. If the string is 'number' then that is a leaf node and the recursion can be 
  * stopped. If the string is 'expression' then the evaluation has to continue. It uses
  * the eval_op function to return the result 
+ *
+ * Now that we have an error handling mechanism, we use this to ensure that we are not 
+ * erronous values.
+ *
+ * We use a special variable called errono, wehich is used to find the type of the error
+ * is ERANGE which means whether the result is too large. This is done to ensure that the
+ * conversion of the number field in children struct of the tree to float is done properly.
  */
 
 lval eval(mpc_ast_t* t)
