@@ -1,65 +1,84 @@
-#include <stdio.h>
-#include <stdlib.h>
-#include <math.h>
 #include "mpc.h"
-
-/* If we are compiling on Windows, compile these functions */
+/* Here we are checking if the operating system in windows
+ * and then we are making a fake readline function to serve
+ * as readline for windows
+ */
 
 #ifdef _WIN32
 
-#include <string.h>
+static char buffer[2048];
 
-/* Fake readline function */
-char* readline(char* prompt)
+char* readline(char* prompt) 
 {
-
-  /* gets a prompt and prints it out waiting for input */
+  // This puts a prompt and waits for input from stdin
   fputs(prompt, stdout);
   fgets(buffer, 2048, stdin);
 
-  /* Copy the input into a buffer called cpy and add \0 (Null terminator) to the end of the string */
+  // This part allocates memory for the string cpy into which
+  // copy the contents of buffer. cpy is allocated the memory
+  // of buffer + 1 because we need the null terminator '\0' 
+  // to signify the end of the string.
+
   char* cpy = malloc(strlen(buffer)+1);
+  strcpy(cpy, buffer);
   cpy[strlen(cpy)-1] = '\0';
-
-
   return cpy;
 }
 
-/* Otherwise include editline */
+/* This function is left empty as this behavior of storing the
+ * history is default in windows
+ */
+
+void add_history(char* unused) {}
 
 #else
 
-#include<editline/readline.h>
-#include<histedit.h>
+// In arch the library is histedit.h not history.h
+
+#include <editline/readline.h>
+#include <histedit.h>
 
 #endif
 
+/* Add SYM and SEXPR as possible lval types */
+// This enum contains all possible lval (lisp value) types
+// that our interpretter can handle. We use an enum to 
+// easily enumurate the values which makes the code easier to
+// read.
 
-/* Create an Enumeration of possible lval types */
-// Adding SYM and SEXPR as possible types
-enum { LVAL_ERR, LVAL_NUM, LVAL_SYM, LVAL_SEXPR  };
+enum { LVAL_ERR, LVAL_NUM, LVAL_SYM, LVAL_SEXPR };
 
-/* Creating a new lval struct */
-typedef struct lval
+/* This is our main type with which our program handles expressions 
+ * We are declaring a new datatype using typedef.
+ */
+
+typedef struct lval 
 {
+  // We store types using the enum defined above.
   int type;
-  long num;
 
-  // Error and symbold types declared, these contain string data
+  // This field is used to store numbers.
+  long num;
+  
+  /* Error and Symbol types have some string data */
   char* err;
   char* sym;
+  
+  /* Count and Pointer to a list of "lval*" */
+  // We use lval** as it is a pointer to a list 
+  // of pointers. These cointain expressions.
 
-  // Count and pointer to a list of 'lval*' declared
   int count;
   struct lval** cell;
+  
+} lval;
 
-}lval;
+// All these are functions which return the type lval*
+// which is a pointer to the struc of type lval.
+// These basically act as contructors.
 
-void lval_print(lval* v);
-
-// These are constructors for our lval datatype.
-/* Construct a pointer to a new num type lval */
-lval* lval_num(long x)
+/* Construct a pointer to a new Number lval */ 
+lval* lval_num(long x) 
 {
   lval* v = malloc(sizeof(lval));
   v->type = LVAL_NUM;
@@ -67,8 +86,8 @@ lval* lval_num(long x)
   return v;
 }
 
-/* Construct a new pointer to a erorr type lval */
-lval* lval_err(char* m)
+/* Construct a pointer to a new Error lval */ 
+lval* lval_err(char* m) 
 {
   lval* v = malloc(sizeof(lval));
   v->type = LVAL_ERR;
@@ -77,8 +96,8 @@ lval* lval_err(char* m)
   return v;
 }
 
-/* Contruct a new pointer to a sym type eval */
-lval* lval_sym(char* s)
+/* Construct a pointer to a new Symbol lval */ 
+lval* lval_sym(char* s) 
 {
   lval* v = malloc(sizeof(lval));
   v->type = LVAL_SYM;
@@ -87,8 +106,8 @@ lval* lval_sym(char* s)
   return v;
 }
 
-/* Contruct a new pointer to a sexpr type lval */
-lval* lval_sxepr (void)
+/* A pointer to a new empty Sexpr lval */
+lval* lval_sexpr(void) 
 {
   lval* v = malloc(sizeof(lval));
   v->type = LVAL_SEXPR;
@@ -97,316 +116,271 @@ lval* lval_sxepr (void)
   return v;
 }
 
-/* This function is a destructor*/
-void lval_del(lval* v)
+/* This is a resursive function acts as the destructor for our lval type structs.
+ * It checks what type of the passed lval is and frees up memory of
+ * the strings err and sym if the types are LVAL_ERR and LVAL_SYM.
+ * If the type is LVAL_SEXPR then it iterates over all the cells 
+ * freeing up the memory and frees up the memo allocated to contain 
+ * the pointers.
+ */
+
+void lval_del(lval* v) 
 {
-  switch(v->type)
+
+  switch (v->type) 
   {
-    /* Do nothing for number type */
-    case LVAL_NUM:
-      break;
-
-    /* If err or sym, free the string data allocated on the heap*/
+    /* Do nothing special for number type */
+    case LVAL_NUM: break;
+    
+    /* For Err or Sym free the string data */
     case LVAL_ERR:
-      free(v->err);
-      break;
-
+      free(v->err); break;
     case LVAL_SYM:
-      free(v->sym);
-      break;
-
-   /* If the type is sexpr then delete all the elements inside, by
-    * iterating over the list of lists 
-    */
+      free(v->sym); break;
+    
+    /* If Sexpr then delete all elements inside */
     case LVAL_SEXPR:
-      for(int i = 0; i < v->count; i++)
+      for (int i = 0; i < v->count; i++) 
       {
-	lval_del(v->cell[i]);
+        lval_del(v->cell[i]);
       }
-      // also freeing the memory allocated to contain pointers
+      /* Also free the memory allocated to contain the pointers */
       free(v->cell);
     break;
   }
-
-  // Freeing the memory allocated to lval struct itself
+  
+  /* Finally free the memory allocated for the "lval" struct itself */
   free(v);
 }
 
-/* Function to add another list to the cell in the lval structure*/
-lval* lval_add(lval* v, lval* x)
+/* this function adds one more additional cell, or in other words it
+ * adds another pointer to the list of pointers and stores the Pointer
+ * to the passed lval in it.
+ */
+
+lval* lval_add(lval* v, lval* x) 
 {
+  // Increasing the count 
   v->count++;
+  
+  // Reallocating memory with the new count size 
   v->cell = realloc(v->cell, sizeof(lval*) * v->count);
-  v->cell[v->count - 1] = x;
+
+  // assigning the last cell to the new lval type.
+  v->cell[v->count-1] = x;
   return v;
 }
 
-/* This function is used to read in a number, convert it to long and 
- * check for any errors
- */
-lval* lval_read_num(mpc_ast_t* t)
+
+lval* lval_pop(lval* v, int i) 
 {
-  errno = 0;
-  long x = strtol(t->contents, NULL, 10);
-  return errno != ERANGE ? lval_num(x) : lval_err("Invalid number");
-}
-
-lval* lval_read(mpc_ast_t* t)
-{
-  if(strstr(t->tag, "number"))
-    return lval_read_num(t);
-  if(strstr(t->tag, "symbol"))
-    return lval_sym(t->contents);
-
-  lval* x = NULL;
-  if(strcmp(t->tag, ">") == 0)
-  {
-    x = lval_sxepr();
-  }
-
-  if(strstr(t->tag, "sexpr"))
-  {
-    x = lval_sxepr();
-  }
+  /* Find the item at "i" */
+  lval* x = v->cell[i];
   
-  for(int i = 0; i < t->children_num; i++)
-  {
-    if(strcmp(t->children[i]->contents, "(") == 0)
-      continue;
-    if(strcmp(t->children[i]->contents, ")") == 0)
-      continue;
-    if(strcmp(t->children[i]->contents, "{") == 0)
-      continue;
-    if(strcmp(t->children[i]->contents, "}") == 0) 
-      continue;
-    if(strcmp(t->children[i]->contents, "regex") == 0)
-     continue;
-    x = lval_add(x, lval_read(t->children[i])); 
-  }
-
+  /* Shift the memory following the item at "i" over the top of it */
+  memmove(&v->cell[i], &v->cell[i+1], sizeof(lval*) * (v->count-i-1));
+  
+  /* Decrease the count of items in the list */
+  v->count--;
+  
+  /* Reallocate the memory used */
+  v->cell = realloc(v->cell, sizeof(lval*) * v->count);
   return x;
 }
 
-/* Function to print lval */
-// This is because we have two types of possible lval types.
-void lval_expr_print(lval* v, char open, char close)
-{
+lval* lval_take(lval* v, int i) {
+  lval* x = lval_pop(v, i);
+  lval_del(v);
+  return x;
+}
+
+void lval_print(lval* v);
+
+void lval_expr_print(lval* v, char open, char close) {
   putchar(open);
-  for(int i = 0; i < v->count; i++)
-  {
+  for (int i = 0; i < v->count; i++) {
+    
+    /* Print Value contained within */
     lval_print(v->cell[i]);
-
-    if(i != (v->count - 1))
+    
+    /* Don't print trailing space if last element */
+    if (i != (v->count-1)) {
       putchar(' ');
-
+    }
   }
-
   putchar(close);
 }
 
-void lval_print(lval* v)
-{
-  switch(v->type)
-  {
-    case LVAL_NUM:
-      printf("%li", v->num);
-      break;
-    case LVAL_ERR:
-      printf("ERROR: %s", v->err);
-      break;
-    case LVAL_SYM:
-      printf("%s", v->sym);
-      break;
-    case LVAL_SEXPR:
-      lval_expr_print(v, '(', ')');
-      break;
+void lval_print(lval* v) {
+  switch (v->type) {
+    case LVAL_NUM:   printf("%li", v->num); break;
+    case LVAL_ERR:   printf("Error: %s", v->err); break;
+    case LVAL_SYM:   printf("%s", v->sym); break;
+    case LVAL_SEXPR: lval_expr_print(v, '(', ')'); break;
   }
 }
 
-/* Adding a new line to the optput, by printing the lval followed by the new line */
-void lval_println(lval* v)
-{
-  lval_print(v);
-  putchar('\n');
-}
+void lval_println(lval* v) { lval_print(v); putchar('\n'); }
 
-/* This function is to evaluate the operator now that, we have a structure
- * to ensure error handling 
- 
-lval eval_op(lval x, char* op, lval y)
-{
-  // This is similar to the previous version, only difference being that 
-  // we are checking whether lval is of the type error.
-  // If either of the values is an error, return It
-  if(x.type == LVAL_ERR)
-    return x;
-  if(y.type == LVAL_ERR)
-    return y;
-
-  // Otherwise compute the operation and return that
-  if(strcmp(op, "+") == 0)
-    return lval_num(x.num + y.num);
-  if(strcmp(op, "-") == 0)
-    return lval_num(x.num - y.num);
-  if(strcmp(op, "*") == 0)
-    return lval_num(x.num * y.num);
-  if(strcmp(op, "/") == 0)
-    return y.num ==0 ? lval_err(LERR_DIV_ZERO) : lval_num(x.num / y.num);
-  if(strcmp(op, "%") == 0)
-    return lval_num(pow(x.num, y.num));
-}
-
-
-
-/* This is the main recursive evaluation function. It takes in a structure which is
- * the representation of trees and checks if the tag of the structure contains a particular
- * string. If the string is 'number' then that is a leaf node and the recursion can be 
- * stopped. If the string is 'expr' then the evaluation has to continue. It uses
- * the eval_op function to return the result 
- *
- * Now that we have an error handling mechanism, we use this to ensure that we are not 
- * erronous values.
- *
- * We use a special variable called errono, wehich is used to find the type of the error
- * is ERANGE which means whether the result is too large. This is done to ensure that the
- * conversion of the number field in children struct of the tree to float is done properly.
- *
-
-lval eval(mpc_ast_t* t)
-{
-  if(strstr(t->tag, "number"))
-  {
-    // Check whether was an error in the conversion
-    errno = 0;
-    long x = strtol(t->contents, NULL, 10);
-    return errno != ERANGE ? lval_num(x) : lval_err(LERR_BAD_NUM);
+lval* builtin_op(lval* a, char* op) {
+  
+  /* Ensure all arguments are numbers */
+  for (int i = 0; i < a->count; i++) {
+    if (a->cell[i]->type != LVAL_NUM) {
+      lval_del(a);
+      return lval_err("Cannot operator on non number!");
+    }
   }
-
-  char* op = t->children[1]->contents;
-  lval x = eval(t->children[2]);
-
-  int i = 3;
-  while(strstr(t->children[i]->tag, "expr"))
-  {
-    x = eval_op(x, op, eval(t->children[i]));
-    i++;
+  
+  /* Pop the first element */
+  lval* x = lval_pop(a, 0);
+  
+  /* If no arguments and sub then perform unary negation */
+  if ((strcmp(op, "-") == 0) && a->count == 0) { x->num = -x->num; }
+  
+  /* While there are still elements remaining */
+  while (a->count > 0) {
+  
+    /* Pop the next element */
+    lval* y = lval_pop(a, 0);
+    
+    /* Perform operation */
+    if (strcmp(op, "+") == 0) { x->num += y->num; }
+    if (strcmp(op, "-") == 0) { x->num -= y->num; }
+    if (strcmp(op, "*") == 0) { x->num *= y->num; }
+    if (strcmp(op, "/") == 0) {
+      if (y->num == 0) {
+        lval_del(x); lval_del(y);
+        x = lval_err("Division By Zero.");
+        break;
+      }
+      x->num /= y->num;
+    }
+    
+    /* Delete element now finished with */
+    lval_del(y);
   }
-
+  
+  /* Delete input expression and return result */
+  lval_del(a);
   return x;
 }
-*
-*/
 
+lval* lval_eval(lval* v);
 
-/* This is a function which returns the number of children a tree has */
-int number_of_children(mpc_ast_t* t)
-{
-  if(t->children_num == 0)
-    return 1;
-  if(t->children_num == 1)
-  {
-    int total = 1;
-    for(int i = 0; i< t->children_num; i++)
-    {
-      total = total + number_of_children(t->children[i]);
-    }
-    return total;
+lval* lval_eval_sexpr(lval* v) {
+  
+  /* Evaluate Children */
+  for (int i = 0; i < v->count; i++) {
+    v->cell[i] = lval_eval(v->cell[i]);
   }
+  
+  /* Error Checking */
+  for (int i = 0; i < v->count; i++) {
+    if (v->cell[i]->type == LVAL_ERR) { return lval_take(v, i); }
+  }
+  
+  /* Empty Expression */
+  if (v->count == 0) { return v; }
+  
+  /* Single Expression */
+  if (v->count == 1) { return lval_take(v, 0); }
+  
+  /* Ensure First Element is Symbol */
+  lval* f = lval_pop(v, 0);
+  if (f->type != LVAL_SYM) {
+    lval_del(f); lval_del(v);
+    return lval_err("S-expression Does not start with symbol.");
+  }
+  
+  /* Call builtin with operator */
+  lval* result = builtin_op(v, f->sym);
+  lval_del(f);
+  return result;
 }
 
-/* This is a function to count the number of branches of a tree */
-int number_of_branches(mpc_ast_t* t)
-{
-  // This the base case for our recursion. It checks if the fist has number,
-  // if it does then it means that there are no more branches.
-  if(strstr(t->tag, "number"))
-    return 1;
-
-  // Initializing the accumulators and the loop variables
-  int total = 1;
-  int i = 3;
-
-  // Checking if the tag contains expr
-  while(strstr(t->children[i]->tag, "expr"))
-  {
-    total  = total + number_of_branches(t->children[i]);
-    i ++;
-  }
-  return total;
+lval* lval_eval(lval* v) {
+  /* Evaluate Sexpressions */
+  if (v->type == LVAL_SEXPR) { return lval_eval_sexpr(v); }
+  /* All other lval types remain the same */
+  return v;
 }
 
-/*Declare a static buffer for user input of maximun size 2048*/
+lval* lval_read_num(mpc_ast_t* t) {
+  errno = 0;
+  long x = strtol(t->contents, NULL, 10);
+  return errno != ERANGE ? lval_num(x) : lval_err("invalid number");
+}
 
-int main(int arc, char** argv)
-{
+lval* lval_read(mpc_ast_t* t) {
+  
+  /* If Symbol or Number return conversion to that type */
+  if (strstr(t->tag, "number")) { return lval_read_num(t); }
+  if (strstr(t->tag, "symbol")) { return lval_sym(t->contents); }
+  
+  /* If root (>) or sexpr then create empty list */
+  lval* x = NULL;
+  if (strcmp(t->tag, ">") == 0) { x = lval_sexpr(); } 
+  if (strstr(t->tag, "sexpr"))  { x = lval_sexpr(); }
+  
+  /* Fill this list with any valid expression contained within */
+  for (int i = 0; i < t->children_num; i++) {
+    if (strcmp(t->children[i]->contents, "(") == 0) { continue; }
+    if (strcmp(t->children[i]->contents, ")") == 0) { continue; }
+    if (strcmp(t->children[i]->contents, "}") == 0) { continue; }
+    if (strcmp(t->children[i]->contents, "{") == 0) { continue; }
+    if (strcmp(t->children[i]->tag,  "regex") == 0) { continue; }
+    x = lval_add(x, lval_read(t->children[i]));
+  }
+  
+  return x;
+}
 
-  /* Create parsers using the mpc library */
-  // Creating individual parts of the language
+int main(int argc, char** argv) {
   
   mpc_parser_t* Number = mpc_new("number");
   mpc_parser_t* Symbol = mpc_new("symbol");
-  mpc_parser_t* Expr = mpc_new("expr");
-  mpc_parser_t* Sexpr = mpc_new("sexpr");
-  mpc_parser_t* Lispy = mpc_new("lispy");
-
-  // Define the parsers using the following language
+  mpc_parser_t* Sexpr  = mpc_new("sexpr");
+  mpc_parser_t* Expr   = mpc_new("expr");
+  mpc_parser_t* Lispy  = mpc_new("lispy");
+  
   mpca_lang(MPCA_LANG_DEFAULT,
-      "									\
-        number		: /-?[0-9]+/ ; 					\
-  	symbol		: '+' | '-' | '*' | '/'	;			\
-	sexpr		: '(' <expr>* ')' ;				\
-	expr		: <number> | <symbol>| <sexpr> ;		\	
-	lispy		: /^/ <expr>* /$/ ;				\      
-      ",
-      Number,Symbol, Sexpr, Expr,  Lispy);
-
-  /*Print versiona nd exit information */
-  puts("Lispy Version 0.0.0.2");
+    "                                          \
+      number : /-?[0-9]+/ ;                    \
+      symbol : '+' | '-' | '*' | '/' ;         \
+      sexpr  : '(' <expr>* ')' ;               \
+      expr   : <number> | <symbol> | <sexpr> ; \
+      lispy  : /^/ <expr>* /$/ ;               \
+    ",
+    Number, Symbol, Sexpr, Expr, Lispy);
+  
+  puts("Lispy Version 0.0.0.0.5");
   puts("Press Ctrl+c to Exit\n");
-
-  /* Infinite loop */
-  while(1)
-  {
-
-    /* Output our prompt and get input */
-    char* input = readline("lispy>");
-
-    /* Add history to the input */
+  
+  while (1) {
+  
+    char* input = readline("lispy> ");
     add_history(input);
-
-    /* Attempt to parse the user input*/
+    
     mpc_result_t r;
-
-    if(mpc_parse("<stdin>", input, Lispy, &r))
-    {
-      //On succes print the AST
-      lval* x = lval_read(r.output);
-      int total = number_of_children(r.output);
-      int branches = number_of_branches(r.output);
-
-
+    if (mpc_parse("<stdin>", input, Lispy, &r)) {
+      
+      lval* x = lval_eval(lval_read(r.output));
       lval_println(x);
       lval_del(x);
-      printf("This tree has %d children\n", total);
-      printf("This tree has %d branches\n", branches);
-
-      mpc_ast_print(r.output);
+      
       mpc_ast_delete(r.output);
-    }
-    else
-    {
-      // Print error
+    } else {    
       mpc_err_print(r.error);
       mpc_err_delete(r.error);
     }
-
-    /* Free retrieved input */
+    
     free(input);
-
+    
   }
-
-  /* Undefine and delete the parsers */
-  mpc_cleanup(5, Number,Symbol,Sexpr, Expr, Lispy);
-
+  
+  mpc_cleanup(5, Number, Symbol, Sexpr, Expr, Lispy);
+  
   return 0;
 }
+
