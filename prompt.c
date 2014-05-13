@@ -27,7 +27,7 @@ char* readline(char* prompt){
 #else
 
 #include<editline/readline.h>
-#include<histedit.h>
+#include<editline/history.h>
 
 #endif
 
