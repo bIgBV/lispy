@@ -1,4 +1,5 @@
 #include <math.h>
+#include <stdlib.h>
 #include "mpc.h"
 /* Here we are checking if the operating system in windows
  * and then we are making a fake readline function to serve
@@ -59,7 +60,7 @@ typedef struct lval
   int type;
 
   // This field is used to store numbers.
-  long num;
+  double num;
   
   /* Error and Symbol types have some string data */
   char* err;
@@ -220,7 +221,7 @@ void lval_print(lval* v)
   switch (v->type) 
   {
     case LVAL_NUM:
-      printf("%li", v->num);
+      printf("%f", v->num);
       break;
     case LVAL_ERR:
       printf("Error: %s", v->err);
@@ -314,7 +315,7 @@ lval* builtin_op(lval* a, char* op)
     }
     if (strcmp(op, "%") == 0)
     {
-      x->num = x->num % y->num;
+      x->num = fmod(x->num, y->num);
     }
     if (strcmp(op, "^") == 0)
     {
@@ -425,7 +426,7 @@ lval* lval_eval(lval* v)
 lval* lval_read_num(mpc_ast_t* t) 
 {
   errno = 0;
-  long x = strtol(t->contents, NULL, 10);
+  double x = atof(t->contents);
   return errno != ERANGE ? lval_num(x) : lval_err("invalid number");
 }
 
@@ -519,7 +520,7 @@ int main(int argc, char** argv)
   
   mpca_lang(MPCA_LANG_DEFAULT,
     "                                          	    \
-      number : /-?[0-9]+/ ;                    	    \
+      number : /-?[0-9]+.[0-9]+/ ;                    	    \
       symbol : '+' | '-' | '*' | '/' | '%' | '^';   \
       sexpr  : '(' <expr>* ')' ;                    \
       expr   : <number> | <symbol> | <sexpr> ;      \
